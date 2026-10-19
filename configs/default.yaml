@@ -15,6 +15,15 @@ splits:
   test_size: 0.2
   shuffle: true
 
+eval:
+  # Three-way grouped split over the folds of splits.n_folds:
+  # fold `test_fold` -> test, fold `calibration_fold` -> calibration, rest -> train.
+  test_fold: 0
+  calibration_fold: 1
+  ece_bins: 10
+  recall_at_precision: 0.99
+  pr_auc_average: macro
+
 features:
   target: koi_disposition
   group: kepid
@@ -62,8 +71,20 @@ calibration:
 
 conformal:
   alpha: 0.10
-  score: maxp        # 1 - max predicted probability
+  score: maxp        # maxp | aps
+  mode: marginal     # marginal | mondrian
+  target_coverage: 0.90
+  # Always put the model's best guess in the set, so a set is never empty.
+  always_include_argmax: true
 
 report:
   top_k: 5
   random_seed: 42
+
+shap:
+  # tree_path: classic Lundberg attribution, fast.
+  # interventional: attributes against the background distribution, stricter.
+  perturbation: tree_path
+  background_size: 100
+  # Rows sampled for the global importance table.
+  global_max_rows: 2000

@@ -13,10 +13,10 @@ PYTHON ?= python
 data:		## Pull the raw KOI table, save CSV + SHA256 + retrieval date
 	$(PYTHON) scripts/fetch_data.py
 
-train:		## Train models (placeholder until Phase 2)
+train:		## Train models, calibrate, fit conformal sets, evaluate (Phase 2)
 	$(PYTHON) scripts/train.py
 
-ablate:		## Leakage ablation: feature set A vs B, grouped vs random (Phase 2)
+ablate:		## Leakage ablation: feature set A vs B, grouped vs sibling leak (Phase 2)
 	$(PYTHON) scripts/ablate_leakage.py
 
 cross:		## Kepler -> TESS zero-shot evaluation (Phase 5)
