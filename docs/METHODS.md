@@ -2,8 +2,8 @@
 
 The method as it is implemented, in the form a paper needs it. Phase 2
 covers the data, the model, the calibration, the prediction sets and the
-explanations. Phase 5 (cross-mission) and Phase 7 (figures) extend this
-document.
+explanations. Section 10 covers the cross-mission transfer (Phase 5).
+Phase 7 (figures) extends this document further.
 
 ## 1. Data
 
@@ -181,6 +181,121 @@ whole of Phase 2 is reproduced by
 
 which writes `results/train_report.md`, `results/ablation_report.md`,
 `results/shap_stability_report.md` and the matching JSON bundles.
+
+## 10. Cross-mission transfer
+
+### 10.1 The test set
+
+The TESS Objects of Interest table of the same archive, 8,151 rows, with
+the raw CSV, its checksum and the retrieval date in `data/raw/`. The
+model is trained on Kepler and applied to these objects with no change:
+the same weights, the same calibrator, the same conformal threshold.
+
+### 10.2 Feature harmonisation
+
+Nine of the eleven core Kepler features exist in the TOI table with the
+same definition and the same unit:
+
+| Kepler | TOI | unit |
+|---|---|---|
+| `koi_period` | `pl_orbper` | days |
+| `koi_duration` | `pl_trandurh` | hours |
+| `koi_depth` | `pl_trandep` | ppm |
+| `koi_prad` | `pl_rade` | Earth radii |
+| `koi_teq` | `pl_eqt` | K |
+| `koi_insol` | `pl_insol` | Earth flux |
+| `koi_steff` | `st_teff` | K |
+| `koi_slogg` | `st_logg` | log g |
+| `koi_srad` | `st_rad` | solar radii |
+
+Two are left out. `koi_impact` has no TOI counterpart at all. `koi_kepmag`
+would have to be replaced by `st_tmag`, which is a different photometric
+system; substituting it would hand the model a systematically shifted
+feature, so the model is trained on nine features instead of eleven. The
+model is never told which mission an object came from.
+
+### 10.3 Label harmonisation
+
+The TOI table carries the TFOP working group disposition, which is mapped
+onto the three canonical labels:
+
+| TFOPWG | canonical | rows |
+|---|---|---|
+| `PC` planetary candidate | CANDIDATE | 4,820 |
+| `APC` ambiguous planetary candidate | CANDIDATE | 490 |
+| `CP` confirmed planet | CONFIRMED | 815 |
+| `KP` known planet | CONFIRMED | 606 |
+| `FP` false positive | FALSE POSITIVE | 1,315 |
+| `FA` false alarm | FALSE POSITIVE | 100 |
+
+The two vetting pipelines are not the same, and the classes are not
+interchangeable. The Kepler FALSE POSITIVE class is the automatic
+pipeline's rejection of a large population of obviously non-planet
+signals, eclipsing binaries among them. The TOI FALSE POSITIVE class is
+a rejection by human vetting of objects that looked plausible enough to
+be worth vetting. This turns out to be the main reason the transfer
+fails.
+
+### 10.4 Recalibration
+
+Two recalibrations are fitted on a held-out half of the TESS objects,
+grouped by host star, and scored on the other half.
+
+*Isotonic* refits the per-class isotonic map on the TESS calibration
+half. On a population that is 65% CANDIDATE, the per-class maps push the
+arg-max onto that class and bury the other two, so this recovers almost
+nothing.
+
+*Label shift* (the prior correction) rescales the class probabilities by
+the ratio of the target prior to the source prior,
+
+    p_new(y | x)  proportional to  p_old(y | x) * pi_new(y) / pi_old(y)
+
+where `pi_old` is the class prior of the Kepler training fold and
+`pi_new` is estimated from the TESS calibration labels. This is the
+classical label-shift correction and it uses no information from the
+target features beyond their labels, so it is the most conservative
+thing that can be done to a model that has moved population.
+
+### 10.5 Results
+
+| setting | macro-F1 | PR-AUC | coverage |
+|---|---|---|---|
+| Kepler test fold | 0.6749 | 0.7462 | 0.8966 |
+| TESS, zero shot | 0.2930 | 0.4407 | 0.4740 |
+| TESS, isotonic recalibration | 0.2939 | 0.4439 | 0.9020 |
+| TESS, label-shift recalibration | 0.4144 | 0.4317 | 0.8853 |
+| TESS, trained on TESS | 0.4341 | 0.5757 | 0.9085 |
+
+Per-class PR-AUC, against the class prior:
+
+| setting | CONFIRMED | CANDIDATE | FALSE POSITIVE |
+|---|---|---|---|
+| Kepler test fold | 0.826 | 0.491 | 0.922 |
+| TESS, zero shot | 0.319 | 0.677 | 0.326 |
+| TESS, in domain | 0.431 | 0.789 | 0.507 |
+
+Two separate things go wrong. The class prior moves from CANDIDATE 21%
+to 65%, which a label-shift correction repairs and which accounts for
+most of the gap between the zero-shot and in-domain macro-F1. The
+ranking collapses on the other two classes, and the in-domain TESS
+reference shows that this is mostly the task being different rather than
+the transfer failing: the same features on the same objects reach only
+PR-AUC 0.51 on the TESS FALSE POSITIVE class.
+
+The conformal coverage collapses to 0.474 in the zero-shot case. That is
+expected and is not a bug: the split-conformal guarantee is an
+exchangeability statement, and TESS objects are not a fresh sample of
+Kepler objects. The zero-shot coverage is reported as an observation, not
+as a guarantee.
+
+### 10.6 Conclusion
+
+A Kepler-trained model does not transfer to TESS, and the reason is that
+the two tables answer different questions. A product that claims to work
+on TESS has to be trained on TESS. This is the kind of result that a
+copied benchmark would have hidden, and it is the reason the project
+measures the cross-mission claim instead of asserting it.
 
 ## References
 

@@ -20,12 +20,13 @@ make train      # Phase 2: train, calibrate, conformalise, evaluate
 make ablate     # Phase 2: leakage ablation (feature sets and split strategies)
 make stability  # Phase 2: SHAP top-feature stability across folds
 make phase2     # Phase 2: everything above, in one command
+make toi        # Phase 5: fetch the TESS Objects of Interest table
+make cross      # Phase 5: Kepler -> TESS zero-shot evaluation
 make test       # run pytest suite
 make ruff       # lint
 ```
 
-`make cross` (Phase 5) and `make api` (Phase 6) are stubbed until those
-phases are implemented.
+`make api` (Phase 6) is stubbed until that phase is implemented.
 
 ## Results summary
 
@@ -109,8 +110,44 @@ Every fold picks the same five features, in the same order except that one
 fold swaps `koi_period` and `koi_depth`. The explanation the user sees is
 a property of the model, not of one split.
 
+### Cross-mission: Kepler to TESS
+
+The model is trained on Kepler and applied to the TESS Objects of Interest
+table without any change. Nine of the eleven core features exist in both
+missions with the same definition and unit; `koi_impact` has no TOI
+counterpart and `koi_kepmag` would have to be replaced by a TESS
+magnitude, a different photometric system, so both are left out.
+
+| setting | macro-F1 | PR-AUC | conformal cov. |
+|---|---|---|---|
+| Kepler test fold (in domain) | 0.6749 | 0.7462 | 0.8966 |
+| TESS, zero shot | 0.2930 | 0.4407 | 0.4740 |
+| TESS, recalibrated (label shift) | 0.4144 | 0.4317 | 0.8853 |
+| TESS, trained on TESS (in domain) | 0.4341 | 0.5757 | 0.9085 |
+
+**The model does not transfer.** Three things are going on, and the report
+separates them:
+
+- The class prior moves from CANDIDATE 21% to 65%, so a model fitted under
+  the Kepler prior almost never predicts CANDIDATE on TESS (recall 0.06).
+  A label-shift correction recovers most of that and lifts macro-F1 to
+  0.4144, close to the in-domain ceiling.
+- The ranking collapses on the other two classes. Per-class PR-AUC on
+  FALSE POSITIVE goes from 0.92 on Kepler to 0.33 zero-shot, but a model
+  *trained on TESS* only reaches 0.51, because Kepler's FALSE POSITIVE
+  class is the automatic pipeline's rejection of a large population of
+  obviously non-planet signals, while the TESS class is a human-vetted
+  rejection of subtle ones. The two classes are not the same class.
+- The conformal coverage collapses with it, to 0.474. The split-conformal
+  guarantee is an exchangeability statement, and TESS objects are not a
+  fresh sample of Kepler objects.
+
+The conclusion is that the two tables answer different questions, and a
+product that claims to work on TESS has to be trained on TESS. This is the
+kind of result that a copy of someone else's benchmark would have hidden.
+
 Full reports: `results/train_report.md`, `results/ablation_report.md`,
-`results/shap_stability_report.md`.
+`results/shap_stability_report.md`, `results/cross_mission_report.md`.
 
 ## Layout
 
@@ -120,18 +157,21 @@ src/exovet/
   splits.py       stratified group k-fold, three-way train/calibration/test
   features.py     imputation, scaling and one-hot encoding
   models.py       logistic regression, random forest, xgboost
-  calibration.py  isotonic, confidence-isotonic, vector scaling, temperature
+  calibration.py  isotonic, confidence-isotonic, vector scaling, temperature, prior
   conformal.py    split conformal prediction sets
   eval.py         macro-F1, PR-AUC, recall@99%, log-loss, Brier, ECE
   explain.py      SHAP global and per-prediction
   stability.py    cross-fold stability of the SHAP feature ranking
+  crossmission.py  Kepler/TESS feature and label harmonisation
   report.py       plain-English report from the top-k SHAP features
   pipeline.py     model + calibrator + conformal + explanation, end to end
 scripts/
   fetch_data.py   archive download with checksum and retrieval record
+  fetch_toi.py    TESS TOI table download (Phase 5)
   train.py        Phase 2 training and evaluation
   ablate_leakage.py  Phase 2 leakage ablation
   shap_stability.py  Phase 2 cross-fold SHAP stability
+  cross_mission.py   Phase 5 Kepler to TESS evaluation
 ```
 
 ## Limitations
@@ -140,8 +180,18 @@ scripts/
   values may differ from DR25 paper numbers (see docs/DATA_NOTES.md).
 - Grouped splits use `kepid` (host-star id); multi-planet systems share a
   host, so sibling KOIs never straddle train/test.
-- The model is trained on Kepler only. It has not yet been evaluated on
-  TESS objects (Phase 5), so the cross-mission claim is untested.
+- The model is trained on Kepler only. The TESS evaluation (Phase 5)
+  shows that a Kepler-trained model does not transfer: macro-F1 falls from
+  0.6749 to 0.2930 zero-shot, and even a model trained on TESS only
+  reaches 0.4341, because the two tables define their FALSE POSITIVE
+  classes differently.
+- The conformal coverage guarantee holds within a mission. Across
+  missions it is an observation, not a guarantee: the empirical coverage
+  on TESS falls to 0.474 zero-shot.
+- The TOI table's `tfopwg_disp` is mapped onto the three canonical labels
+  (PC/APC to CANDIDATE, CP/KP to CONFIRMED, FP/FA to FALSE POSITIVE).
+  The mapping is stated in the report because the classes are close but
+  not identical.
 - `koi_pdisposition` and the other vetting columns are excluded from the
   main model on purpose; a model that uses them would score much better
   and would be meaningless.

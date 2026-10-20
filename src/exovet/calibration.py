@@ -31,6 +31,12 @@ Four methods are available:
     A single temperature on the log-probabilities, ``softmax(log p / T)``.
     The least flexible of the four, and the only one that provably cannot
     change the arg-max or the prediction order.
+
+``prior``
+    A label-shift correction: the class probabilities are rescaled by the
+    ratio of the target prior to the source prior and renormalised. It is
+    the right tool when the population has moved but the relationship
+    between the features and the label has not.
 """
 
 from __future__ import annotations
@@ -178,9 +184,57 @@ def apply_temperature(state: Dict[str, Any], proba: np.ndarray) -> np.ndarray:
 
 
 # ----------------------------------------------------------------------
+# prior correction (label shift)
+# ----------------------------------------------------------------------
+def fit_prior(
+    proba: np.ndarray,
+    y: np.ndarray,
+    classes: Sequence[str],
+    source_prior: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    """Fit a prior-correction calibrator for label shift.
+
+    Under label shift the conditional distribution ``p(y | x)`` is
+    unchanged and only the class prior moves, so the corrected
+    probability is
+
+        p_new(y | x)  proportional to  p_old(y | x) * pi_new(y) / pi_old(y)
+
+    where ``pi_old`` is the prior of the data the model was trained on and
+    ``pi_new`` is the prior of the target data, estimated here from the
+    calibration labels.
+
+    This is the classical label-shift correction. It uses no information
+    from the target features beyond the labels, so it is the most
+    conservative thing that can be done to a model that has moved to
+    another population.
+    """
+    codes = _encode(y, classes)
+    target = np.array([(codes == position).mean() for position in range(len(classes))], dtype=float)
+    if source_prior is None:
+        source = target.copy()
+    else:
+        source = np.asarray(source_prior, dtype=float)
+    ratio = np.divide(target, source, out=np.ones_like(target), where=np.asarray(source) > 0)
+    return {
+        "method": "prior",
+        "classes": tuple(classes),
+        "ratio": ratio,
+        "source_prior": source,
+        "target_prior": target,
+    }
+
+
+def apply_prior(state: Dict[str, Any], proba: np.ndarray) -> np.ndarray:
+    """Apply the prior correction."""
+    proba = np.asarray(proba, dtype=float)
+    return _clip(proba * state["ratio"])
+
+
+# ----------------------------------------------------------------------
 # factory
 # ----------------------------------------------------------------------
-METHODS = ("isotonic", "isotonic_confidence", "platt", "temperature")
+METHODS = ("isotonic", "isotonic_confidence", "platt", "temperature", "prior")
 
 
 def fit_calibrator(
@@ -188,10 +242,13 @@ def fit_calibrator(
     proba: np.ndarray,
     y: np.ndarray,
     classes: Sequence[str],
+    source_prior: Optional[Sequence[float]] = None,
 ) -> Dict[str, Any]:
     """Fit the calibrator named *method* on ``(proba, y)``.
 
     *proba* must have its columns in the canonical *classes* order.
+    *source_prior* is the class prior of the data the model was trained
+    on; only the ``prior`` method uses it.
     """
     if method == "isotonic":
         return fit_isotonic(proba, y, classes)
@@ -201,6 +258,8 @@ def fit_calibrator(
         return fit_platt(proba, y, classes)
     if method == "temperature":
         return fit_temperature(proba, y, classes)
+    if method == "prior":
+        return fit_prior(proba, y, classes, source_prior=source_prior)
     raise ValueError(f"unknown calibration method {method!r}; expected one of {METHODS}")
 
 
@@ -217,4 +276,6 @@ def apply_calibrator(state: Optional[Dict[str, Any]], proba: np.ndarray) -> np.n
         return apply_platt(state, proba)
     if method == "temperature":
         return apply_temperature(state, proba)
+    if method == "prior":
+        return apply_prior(state, proba)
     raise ValueError(f"unknown calibration method {method!r}")

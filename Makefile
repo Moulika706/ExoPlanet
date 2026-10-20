@@ -8,10 +8,13 @@
 #
 PYTHON ?= python
 
-.PHONY: data train ablate stability phase2 cross test api lint ruff fmt clean
+.PHONY: data toi train ablate stability phase2 cross test api lint ruff fmt clean
 
 data:		## Pull the raw KOI table, save CSV + SHA256 + retrieval date
 	$(PYTHON) scripts/fetch_data.py
+
+toi:		## Pull the raw TESS TOI table (Phase 5 test set)
+	$(PYTHON) scripts/fetch_toi.py
 
 train:		## Train models, calibrate, fit conformal sets, evaluate (Phase 2)
 	$(PYTHON) scripts/train.py
@@ -29,6 +32,7 @@ phase2:		## Everything in Phase 2: train, ablate, stability
 
 cross:		## Kepler -> TESS zero-shot evaluation (Phase 5)
 	$(PYTHON) scripts/cross_mission.py
+
 
 test:		## Run the test suite
 	$(PYTHON) -m pytest tests/ -q

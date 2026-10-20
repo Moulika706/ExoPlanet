@@ -33,7 +33,8 @@ RAW_DIR = Path("data/raw")
 RAW_CSV = RAW_DIR / "koi_cumulative.csv"
 SHA_PATH = RAW_DIR / "koi_cumulative.csv.sha256"
 RETRIEVAL_PATH = RAW_DIR / "retrieval.json"
-TAP_URL = "https://exoplanetarchive.ipac.caltech.edu/tap/sync"
+# The path is case sensitive: /TAP/sync answers, /tap/sync is a 404.
+TAP_URL = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
 
 
 def fetch_via_astroquery() -> pd.DataFrame:

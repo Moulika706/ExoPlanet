@@ -19,7 +19,7 @@ import pandas as pd
 
 from .calibration import apply_calibrator, fit_calibrator
 from .conformal import SplitConformal
-from .data import LABELS
+from .data import LABELS, TARGET
 from .eval import evaluate, reliability_table
 from .explain import compute_shap_values, local_explanation_frame, transformed_feature_names
 from .models import build_model
@@ -83,6 +83,7 @@ class VettingPipeline:
         self.background_: Optional[np.ndarray] = None
         self.metrics: Dict[str, Any] = {}
         self.split_indices: Dict[str, List[int]] = {}
+        self.train_prior: Dict[str, float] = {}
 
     # ------------------------------------------------------------------
     # training
@@ -178,6 +179,10 @@ class VettingPipeline:
         )
         self.pipeline.fit(X_train, y_train)
         self.label_encoder = self.pipeline.named_steps["classifier"].encoder_
+        # The class prior of the training data. The prior-correction
+        # calibrator needs it: it compares the prior the model was fitted
+        # under with the prior of the population it is later applied to.
+        self.train_prior = {cls: float((y_train == cls).mean()) for cls in self.classes}
 
         # A fixed reference sample of the training fold, used as the SHAP
         # background so that explanations do not depend on the row being
@@ -276,6 +281,53 @@ class VettingPipeline:
     def _calibrated_proba(self, X: pd.DataFrame) -> np.ndarray:
         return apply_calibrator(self.calibrator, self._raw_proba(X))
 
+    def calibrated_proba(self, X: pd.DataFrame) -> np.ndarray:
+        """Calibrated class probabilities, in the canonical class order."""
+        return self._calibrated_proba(X)
+
+    def recalibrate(
+        self,
+        df: pd.DataFrame,
+        target_column: str = TARGET,
+        classes: Optional[Sequence[str]] = None,
+        method: Optional[str] = None,
+        source_prior: Optional[Dict[str, float]] = None,
+    ) -> "VettingPipeline":
+        """Refit the calibrator and the conformal predictor on *df*.
+
+        The model itself is not touched. This is the recalibration step of
+        the cross-mission transfer: the decision rule learned on one
+        mission stays fixed, and only the probability mapping and the
+        conformal threshold are re-estimated on the new one.
+
+        *df* must carry the same feature columns as the fitted model and
+        the same target column as the training data. *source_prior* is the
+        class prior of the data the model was trained on; it is only used
+        by the ``prior`` (label shift) calibrator and defaults to the
+        prior of the training fold.
+        """
+        label_order = tuple(classes) if classes is not None else self.classes
+        X = df[self.features]
+        y = df[target_column].to_numpy()
+        raw = self._raw_proba(X)
+        prior = source_prior if source_prior is not None else self.train_prior
+        prior_vector = [float(prior.get(cls, 0.0)) for cls in label_order]
+        self.calibrator = fit_calibrator(
+            method or self.calibration_method,
+            raw,
+            y,
+            label_order,
+            source_prior=prior_vector,
+        )
+        calibrated = apply_calibrator(self.calibrator, raw)
+        self.conformal = SplitConformal(
+            alpha=self.conformal_alpha,
+            mode=self.conformal_mode,
+            classes=label_order,
+            always_include_argmax=self.always_include_argmax,
+        ).fit(calibrated, y)
+        return self
+
     def predict_frame(self, X: pd.DataFrame) -> List[VettingResult]:
         """Vet every row of *X* and return one result per row."""
         raw = self._raw_proba(X)
@@ -358,6 +410,7 @@ class VettingPipeline:
                 "classes": self.classes,
                 "top_k": self.top_k,
                 "n_bins": self.n_bins,
+                "train_prior": self.train_prior,
                 "pipeline": self.pipeline,
                 "label_encoder": self.label_encoder,
                 "background": self.background_,
@@ -396,4 +449,5 @@ class VettingPipeline:
         instance.calibrator = state["calibrator"]
         instance.conformal = state["conformal"]
         instance.metrics = state.get("metrics", {})
+        instance.train_prior = state.get("train_prior", {})
         return instance

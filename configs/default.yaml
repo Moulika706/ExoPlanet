@@ -94,3 +94,37 @@ stability:
   model: xgboost
   # Rows sampled per fold for the SHAP computation.
   max_rows: 1500
+
+# Cross-mission transfer, Kepler to TESS (Phase 5).
+cross_mission:
+  toi:
+    raw_csv: data/raw/toi.csv
+    retrieval_record: data/raw/retrieval_toi.json
+    # TFOP working group disposition, mapped onto the canonical labels.
+    disposition_column: tfopwg_disp
+    # The host star of a TESS object (TESS Input Catalog id).
+    group_column: tid
+  # The core Kepler features that exist in both missions with the same
+  # definition and the same unit. koi_impact has no TOI counterpart and
+  # koi_kepmag would have to be replaced by a TESS magnitude, which is a
+  # different photometric system, so both are left out.
+  shared_features:
+    - koi_period
+    - koi_duration
+    - koi_depth
+    - koi_prad
+    - koi_teq
+    - koi_insol
+    - koi_steff
+    - koi_slogg
+    - koi_srad
+  # TFOPWG disposition to canonical label.
+  label_map:
+    PC: CANDIDATE
+    APC: CANDIDATE
+    CP: CONFIRMED
+    KP: CONFIRMED
+    FP: FALSE POSITIVE
+    FA: FALSE POSITIVE
+  # Fraction of the TESS objects held out for the recalibration fit.
+  calibration_fraction: 0.5
