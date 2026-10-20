@@ -323,6 +323,22 @@ measurements, the predicted class, the corrected class and a timestamp.
 The format needs no database, and the log can be appended without
 rewriting it.
 
+## 12. Figures
+
+The publication figures are built from the bundles in `results/` rather
+than from a fresh run, so they can be regenerated without refitting a
+model or refetching the data:
+
+    make phase2   # training, ablation, SHAP stability
+    make cross    # the cross-mission evaluation
+    make figures  # the figures
+
+Six figures are produced, each as a PNG and a PDF, with the captions in
+`paper/FIGURE_CAPTIONS.md`: the reliability diagram, the conformal
+coverage per class, the leakage ablation, the global SHAP importance,
+the cross-fold stability of the SHAP ranking, and the cross-mission
+transfer.
+
 ## References
 
 - Armstrong, Gamper & Damoulas (2021), MNRAS 504(4), 5327.

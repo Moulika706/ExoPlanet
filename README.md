@@ -24,6 +24,7 @@ make toi        # Phase 5: fetch the TESS Objects of Interest table
 make cross      # Phase 5: Kepler -> TESS zero-shot evaluation
 make web        # Phase 6: build the front end
 make serve      # Phase 6: build the front end and serve it from the API
+make figures    # Phase 7: publication figures from the results bundle
 make test       # run pytest suite
 make ruff       # lint
 ```
@@ -210,6 +211,22 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 Full reports: `results/train_report.md`, `results/ablation_report.md`,
 `results/shap_stability_report.md`, `results/cross_mission_report.md`.
+
+## Figures
+
+`make figures` builds the publication figures from the bundles in
+`results/`, so they can be regenerated without refitting anything. Each
+is written to `paper/figures/` as a PNG and a PDF. The captions are in
+`paper/FIGURE_CAPTIONS.md`.
+
+| figure | what it shows |
+|---|---|
+| `reliability` | the calibration curve before and after isotonic calibration |
+| `conformal_coverage` | per-class coverage of the two conformal modes against the 0.90 target |
+| `leakage_ablation` | the feature leak, the random split and the sibling leak, separated |
+| `shap_importance` | the global SHAP importance of the headline model |
+| `shap_stability` | the feature ranking in every fold, and the overlap between folds |
+| `cross_mission` | the Kepler to TESS drop, and where the ranking collapses |
 
 ## Layout
 
