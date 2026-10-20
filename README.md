@@ -239,6 +239,13 @@ is written to `paper/figures/` as a PNG and a PDF. The captions are in
 | `shap_stability` | the feature ranking in every fold, and the overlap between folds |
 | `cross_mission` | the Kepler to TESS drop, and where the ranking collapses |
 
+## The paper
+
+`paper/DRAFT.md` is the working draft. Every number in it is produced by
+the pipeline, and `tests/test_paper_claims.py` reads the results bundles
+and asserts that the draft quotes them, so the paper cannot drift away
+from the code without a test failing.
+
 ## Layout
 
 ```
