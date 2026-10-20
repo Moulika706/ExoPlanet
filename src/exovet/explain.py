@@ -8,7 +8,7 @@ one-hot encodings stay attached to the right source column.
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -24,6 +24,24 @@ def transformed_feature_names(pipeline) -> List[str]:
     except Exception:  # noqa: BLE001 - fall back to positional names
         names = [f"f{i}" for i in range(preprocessor.transform_shape_[1])]
     return [str(name) for name in names]
+
+
+def source_feature_map(names: Sequence[str], features: Sequence[str]) -> Dict[str, str]:
+    """Map transformed column names back to the source column they came from.
+
+    One-hot encoding turns ``koi_pdisposition`` into several dummy columns.
+    Reports and stability tables want the source column, not the dummy, so
+    the dummies of one column are summed back together.
+    """
+    mapping: Dict[str, str] = {}
+    for name in names:
+        base = name
+        for feature in features:
+            if name == feature or name.startswith(f"{feature}_"):
+                base = feature
+                break
+        mapping[name] = base
+    return mapping
 
 
 def _normalize_values(values, n_samples: int, n_features: int, n_classes: int) -> np.ndarray:

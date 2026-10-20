@@ -18,6 +18,8 @@ pip install -e .   # optional; scripts add the repo root to sys.path themselves
 make data       # Phase 1: fetch KOI cumulative table (CSV + SHA256 + retrieval date)
 make train      # Phase 2: train, calibrate, conformalise, evaluate
 make ablate     # Phase 2: leakage ablation (feature sets and split strategies)
+make stability  # Phase 2: SHAP top-feature stability across folds
+make phase2     # Phase 2: everything above, in one command
 make test       # run pytest suite
 make ruff       # lint
 ```
@@ -44,9 +46,26 @@ candidate is a signal that has not yet been followed up.
 Conformal coverage is above the 0.90 target in every case; a set with more
 than one class triggers the "needs manual review" abstention.
 
+### Conformal modes
+
+Both modes are fitted on the same calibration fold and scored on the same
+test fold.
+
+| mode | coverage | cov. CONFIRMED | cov. CANDIDATE | cov. FALSE POSITIVE | mean set | singleton |
+|---|---|---|---|---|---|---|
+| marginal | 0.9075 | 0.9327 | 0.7652 | 0.9514 | 1.41 | 63.1% |
+| mondrian | 0.9039 | 0.9109 | 0.9066 | 0.8988 | 1.49 | 53.3% |
+
+The marginal mode buys a smaller average set, but it under-covers the rare
+CANDIDATE class (0.765 against a 0.90 target). The Mondrian mode gives up
+some singleton rate and covers every class to at least 0.90, which is the
+guarantee the product should claim.
+
 ### Leakage ablation
 
-Same test rows throughout; only the training data changes.
+Same test rows throughout for `grouped` and `sibling_leak`; only the
+training data changes. The `random` rows use an ordinary stratified split,
+so their test fold differs as well.
 
 | model | set A (clean) + grouped | set B (leaky) + grouped | feature-leak delta |
 |---|---|---|---|
@@ -64,7 +83,34 @@ macro-F1 by at most 0.01 on this table, because only 11.4% of host stars
 carry more than one KOI. It is measured rather than assumed, and the
 grouped split stays the default because it costs nothing.
 
-Full reports: `results/train_report.md`, `results/ablation_report.md`.
+| model | clean + grouped | clean + random split | delta |
+|---|---|---|---|
+| logistic regression | 0.5272 | 0.4986 | -0.0286 |
+| random forest | 0.6981 | 0.6504 | -0.0477 |
+| xgboost | 0.7290 | 0.6857 | -0.0433 |
+
+The random split is not better, it is slightly worse. The grouped split is
+the stricter protocol and it does not cost accuracy, so there is no
+argument for weakening it.
+
+### SHAP stability across folds
+
+The model is refitted on each grouped fold in turn and the global SHAP
+importance is computed on the held-out rows, so the rankings are
+independent of each other.
+
+| quantity | value |
+|---|---|
+| mean Jaccard overlap of the top-5 sets | 1.0000 (worst pair 1.0000) |
+| mean Kendall rank correlation between folds | 0.9491 (worst pair 0.8909) |
+| per-fold macro-F1 | 0.7076 - 0.7281 (std 0.0076) |
+
+Every fold picks the same five features, in the same order except that one
+fold swaps `koi_period` and `koi_depth`. The explanation the user sees is
+a property of the model, not of one split.
+
+Full reports: `results/train_report.md`, `results/ablation_report.md`,
+`results/shap_stability_report.md`.
 
 ## Layout
 
@@ -78,12 +124,14 @@ src/exovet/
   conformal.py    split conformal prediction sets
   eval.py         macro-F1, PR-AUC, recall@99%, log-loss, Brier, ECE
   explain.py      SHAP global and per-prediction
+  stability.py    cross-fold stability of the SHAP feature ranking
   report.py       plain-English report from the top-k SHAP features
   pipeline.py     model + calibrator + conformal + explanation, end to end
 scripts/
   fetch_data.py   archive download with checksum and retrieval record
   train.py        Phase 2 training and evaluation
   ablate_leakage.py  Phase 2 leakage ablation
+  shap_stability.py  Phase 2 cross-fold SHAP stability
 ```
 
 ## Limitations
@@ -97,7 +145,15 @@ scripts/
 - `koi_pdisposition` and the other vetting columns are excluded from the
   main model on purpose; a model that uses them would score much better
   and would be meaningless.
+- The conformal coverage guarantee is marginal by default. The Mondrian
+  mode gives class-conditional coverage, which is the stronger claim, at
+  the cost of a larger average prediction set.
+- The SHAP ranking is computed with `TreeExplainer` in `tree_path` mode.
+  The stricter `interventional` mode is implemented but is roughly eighty
+  times slower and was not needed for the stability check.
 
 ## Paper support
 
-`scripts/make_figures.py` and `docs/METHODS.md` (Phase 7).
+`scripts/make_figures.py` (Phase 7) plots the numbers in
+`results/reliability.csv` and `results/shap_fold_importance.csv`.
+`docs/METHODS.md` describes the method in the form the paper needs.

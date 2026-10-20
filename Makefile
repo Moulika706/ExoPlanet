@@ -8,7 +8,7 @@
 #
 PYTHON ?= python
 
-.PHONY: data train ablate cross test api lint ruff fmt clean
+.PHONY: data train ablate stability phase2 cross test api lint ruff fmt clean
 
 data:		## Pull the raw KOI table, save CSV + SHA256 + retrieval date
 	$(PYTHON) scripts/fetch_data.py
@@ -16,8 +16,16 @@ data:		## Pull the raw KOI table, save CSV + SHA256 + retrieval date
 train:		## Train models, calibrate, fit conformal sets, evaluate (Phase 2)
 	$(PYTHON) scripts/train.py
 
-ablate:		## Leakage ablation: feature set A vs B, grouped vs sibling leak (Phase 2)
+ablate:		## Leakage ablation: feature set A vs B, grouped vs random split (Phase 2)
 	$(PYTHON) scripts/ablate_leakage.py
+
+stability:	## SHAP top-feature stability across folds (Phase 2)
+	$(PYTHON) scripts/shap_stability.py
+
+phase2:		## Everything in Phase 2: train, ablate, stability
+	$(PYTHON) scripts/train.py
+	$(PYTHON) scripts/ablate_leakage.py
+	$(PYTHON) scripts/shap_stability.py
 
 cross:		## Kepler -> TESS zero-shot evaluation (Phase 5)
 	$(PYTHON) scripts/cross_mission.py

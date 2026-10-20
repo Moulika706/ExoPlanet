@@ -10,7 +10,8 @@ For every model in the config the script:
 5. reports metrics on the untouched test fold.
 
 The best model by calibrated macro-F1 is written to ``results/`` together
-with a JSON metric bundle and a Markdown summary.
+with a JSON metric bundle, a Markdown summary, the reliability table of the
+best model, and a comparison of the marginal and Mondrian conformal modes.
 
 Usage:
     python scripts/train.py
@@ -29,7 +30,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from exovet.data import TARGET, clean_labels, load_config, load_raw
+from exovet.data import LABELS, TARGET, clean_labels, load_config, load_raw
 from exovet.explain import global_importance, transformed_feature_names
 from exovet.models import MODEL_NAMES
 from exovet.pipeline import VettingPipeline
@@ -76,6 +77,54 @@ def format_metric_table(rows: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def conformal_mode_table(
+    df: pd.DataFrame, config: Dict[str, Any], model_name: str
+) -> List[Dict[str, Any]]:
+    """Compare the marginal and Mondrian conformal modes on the same model.
+
+    The marginal mode gives one threshold for all classes and guarantees
+    marginal coverage. The Mondrian mode gives one threshold per class and
+    guarantees class-conditional coverage, which is the stronger statement
+    for a three-class problem with a rare class.
+    """
+    seed = config.get("seed", 42)
+    eval_config = config.get("eval", {})
+    splits_config = config.get("splits", {})
+    conformal_config = config.get("conformal", {})
+
+    rows: List[Dict[str, Any]] = []
+    for mode in ("marginal", "mondrian"):
+        pipeline = VettingPipeline(
+            model_name=model_name,
+            params=config["models"].get(model_name, {}),
+            seed=seed,
+            calibration_method=config["calibration"]["method"],
+            conformal_alpha=conformal_config.get("alpha", 0.10),
+            conformal_mode=mode,
+            always_include_argmax=conformal_config.get("always_include_argmax", True),
+            top_k=config["report"]["top_k"],
+        )
+        pipeline.fit(
+            df,
+            n_splits=splits_config.get("n_folds", 5),
+            test_fold=eval_config.get("test_fold", 0),
+            calibration_fold=eval_config.get("calibration_fold", 1),
+        )
+        summary = pipeline.metrics["conformal"]
+        rows.append(
+            {
+                "model": model_name,
+                "mode": mode,
+                "empirical_coverage": summary["empirical_coverage"],
+                "per_class_coverage": summary["per_class_coverage"],
+                "mean_set_size": summary["mean_set_size"],
+                "singleton_rate": summary["singleton_rate"],
+                "target_coverage": summary["target_coverage"],
+            }
+        )
+    return rows
+
+
 def main() -> None:
     config = load_config()
     seed = config.get("seed", 42)
@@ -104,6 +153,7 @@ def main() -> None:
             always_include_argmax=conformal_config.get("always_include_argmax", True),
             shap_perturbation=shap_config.get("perturbation", "tree_path"),
             top_k=config["report"]["top_k"],
+            n_bins=eval_config.get("ece_bins", 10),
         )
         pipeline.fit(
             df,
@@ -140,12 +190,36 @@ def main() -> None:
     best_pipeline = fitted[best_name]
     artifact = best_pipeline.save(RESULTS_DIR / f"model_{best_name}.joblib")
 
+    # Reliability table of the best model, before and after calibration.
+    # The diagram itself is a figure (Phase 7); the numbers it needs are
+    # written here so the plot is reproducible from the results bundle.
+    reliability_rows: List[Dict[str, Any]] = []
+    for stage, table in best_pipeline.metrics["reliability"].items():
+        for row in table:
+            reliability_rows.append({"model": best_name, "stage": stage, **row})
+    reliability = pd.DataFrame(reliability_rows)
+    reliability.to_csv(RESULTS_DIR / "reliability.csv", index=False)
+
+    # Marginal versus Mondrian conformal coverage on the best model.
+    print("\n=== conformal modes ===")
+    conformal_rows = conformal_mode_table(df, config, best_name)
+    for row in conformal_rows:
+        print(
+            "  {mode}: coverage {cov:.4f}, mean set size {size:.2f}, singleton {single:.4f}".format(
+                mode=row["mode"],
+                cov=row["empirical_coverage"],
+                size=row["mean_set_size"],
+                single=row["singleton_rate"],
+            )
+        )
+
     bundle = {
         "seed": seed,
         "config": config,
         "results": results,
         "best_model": best_name,
         "artifact": str(artifact),
+        "conformal_modes": conformal_rows,
     }
     (RESULTS_DIR / "metrics.json").write_text(
         json.dumps(bundle, indent=2, default=str) + "\n", encoding="utf-8"
@@ -185,6 +259,69 @@ def main() -> None:
         "macro average of the per-class recall attainable at 99% precision.",
         "`conformal cov.` is the empirical coverage of the split-conformal",
         f"prediction sets at alpha = {config['conformal'].get('alpha', 0.10)}.",
+        "",
+        "## Per-class recall",
+        "",
+        "| model | " + " | ".join(LABELS) + " |",
+        "|" + "---|" * (1 + len(LABELS)),
+    ]
+    for row in results:
+        recalls = row["calibrated"]["per_class_recall"]
+        cells = " | ".join(f"{recalls.get(cls, float('nan')):.4f}" for cls in LABELS)
+        report.append(f"| {row['model']} | {cells} |")
+
+    report += [
+        "",
+        "## Conformal prediction",
+        "",
+        f"Target coverage {1 - config['conformal'].get('alpha', 0.10):.2f}, "
+        f"mode `{config['conformal'].get('mode', 'marginal')}` by default.",
+        "",
+        "| model | mode | coverage | "
+        + " | ".join(f"cov. {cls}" for cls in LABELS)
+        + " | mean set | singleton |",
+        "|" + "---|" * (5 + len(LABELS)),
+    ]
+    for row in conformal_rows:
+        per_class = row["per_class_coverage"]
+        cells = " | ".join(f"{per_class.get(cls, float('nan')):.4f}" for cls in LABELS)
+        report.append(
+            "| {model} | {mode} | {cov:.4f} | {cells} | {size:.2f} | {single:.4f} |".format(
+                model=row["model"],
+                mode=row["mode"],
+                cov=row["empirical_coverage"],
+                cells=cells,
+                size=row["mean_set_size"],
+                single=row["singleton_rate"],
+            )
+        )
+    report += [
+        "",
+        "The marginal mode uses one threshold for all classes and guarantees",
+        "marginal coverage. The Mondrian mode uses one threshold per class",
+        "and guarantees class-conditional coverage, which is the stronger",
+        "statement for the rare CANDIDATE class.",
+        "",
+        "## Reliability",
+        "",
+        f"Expected calibration error of the best model: "
+        f"{best['calibrated']['expected_calibration_error']:.4f} after calibration "
+        f"(was {best['uncalibrated']['expected_calibration_error']:.4f} before).",
+        "The full reliability table is in `results/reliability.csv`.",
+        "",
+        "## Global SHAP importance",
+        "",
+        f"Mean absolute SHAP value over {len(X_test)} test rows of the best model.",
+        "",
+        "| rank | feature | mean abs SHAP |",
+        "|---|---|---|",
+    ]
+    for position, row in enumerate(importance.head(10).to_dict("records"), start=1):
+        report.append(f"| {position} | {row['feature']} | {row['mean_abs_shap']:.4f} |")
+    report += [
+        "",
+        "How stable this ranking is across folds is measured separately in",
+        "`results/shap_stability_report.md`.",
         "",
         "## Best model",
         "",

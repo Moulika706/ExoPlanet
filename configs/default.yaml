@@ -88,3 +88,9 @@ shap:
   background_size: 100
   # Rows sampled for the global importance table.
   global_max_rows: 2000
+
+# Cross-fold stability of the SHAP ranking (Phase 2).
+stability:
+  model: xgboost
+  # Rows sampled per fold for the SHAP computation.
+  max_rows: 1500

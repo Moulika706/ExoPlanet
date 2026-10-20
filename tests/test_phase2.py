@@ -283,6 +283,23 @@ def test_conformal_rejects_unknown_mode() -> None:
         SplitConformal(mode="nope", classes=CLASSES).fit(proba, y)
 
 
+def test_conformal_summary_reports_per_class_coverage() -> None:
+    proba, y = _calibration_data()
+    conformal = SplitConformal(alpha=0.10, mode="marginal", classes=CLASSES).fit(proba, y)
+    summary = conformal.summary(proba, y)
+    assert set(summary["per_class_coverage"]) == set(CLASSES)
+    for value in summary["per_class_coverage"].values():
+        assert 0.0 <= value <= 1.0
+
+
+def test_conformal_per_class_coverage_is_nan_for_absent_classes() -> None:
+    proba = np.array([[0.7, 0.2, 0.1], [0.6, 0.3, 0.1]])
+    y = np.array(["CONFIRMED", "CONFIRMED"])
+    conformal = SplitConformal(alpha=0.10, mode="marginal", classes=CLASSES).fit(proba, y)
+    summary = conformal.summary(proba, y)
+    assert np.isnan(summary["per_class_coverage"]["CANDIDATE"])
+
+
 # ----------------------------------------------------------------------
 # metrics
 # ----------------------------------------------------------------------
@@ -468,3 +485,27 @@ def test_pipeline_probabilities_sum_to_one() -> None:
     pipeline.fit(df, n_splits=3, test_fold=0, calibration_fold=1)
     result = pipeline.predict_one({f: float(df.iloc[0][f]) for f in pipeline.features})
     assert sum(result.probabilities.values()) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_pipeline_metrics_include_the_reliability_table() -> None:
+    """The reliability diagram is a figure; the numbers behind it are here."""
+    from exovet.pipeline import VettingPipeline
+
+    df = _synthetic_koi_frame()
+    pipeline = VettingPipeline(model_name="random_forest", params={"n_estimators": 20}, seed=42)
+    pipeline.fit(df, n_splits=3, test_fold=0, calibration_fold=1)
+    reliability = pipeline.metrics["reliability"]
+    assert set(reliability) == {"uncalibrated", "calibrated"}
+    for table in reliability.values():
+        assert len(table) == 10
+        assert sum(row["count"] for row in table) == pipeline.metrics["split_sizes"]["test"]
+
+
+def test_pipeline_metrics_include_per_class_conformal_coverage() -> None:
+    from exovet.pipeline import VettingPipeline
+
+    df = _synthetic_koi_frame()
+    pipeline = VettingPipeline(model_name="random_forest", params={"n_estimators": 20}, seed=42)
+    pipeline.fit(df, n_splits=3, test_fold=0, calibration_fold=1)
+    coverage = pipeline.metrics["conformal"]["per_class_coverage"]
+    assert set(coverage) == set(CLASSES)

@@ -160,11 +160,22 @@ class SplitConformal:
         hits = [
             bool(mask[row, positions[label]]) for row, label in enumerate(y) if label in positions
         ]
+        per_class_coverage: dict[str, float] = {}
+        for cls in self.classes:
+            mask_rows = y == cls
+            if not mask_rows.any():
+                per_class_coverage[cls] = float("nan")
+                continue
+            position = positions[cls]
+            per_class_coverage[cls] = float(
+                np.mean([bool(mask[row, position]) for row in np.flatnonzero(mask_rows)])
+            )
         return {
             "alpha": self.alpha,
             "mode": self.mode,
             "n_calibration": self.n_calibration,
             "empirical_coverage": float(np.mean(hits)) if hits else float("nan"),
+            "per_class_coverage": per_class_coverage,
             "target_coverage": 1.0 - self.alpha,
             "mean_set_size": float(np.mean(sizes)),
             "median_set_size": float(np.median(sizes)),

@@ -20,7 +20,7 @@ import pandas as pd
 from .calibration import apply_calibrator, fit_calibrator
 from .conformal import SplitConformal
 from .data import LABELS
-from .eval import evaluate
+from .eval import evaluate, reliability_table
 from .explain import compute_shap_values, local_explanation_frame, transformed_feature_names
 from .models import build_model
 from .report import build_report, check_report_features
@@ -58,6 +58,7 @@ class VettingPipeline:
         shap_perturbation: str = "tree_path",
         classes: Sequence[str] = LABELS,
         top_k: int = 5,
+        n_bins: int = 10,
     ) -> None:
         self.model_name = model_name
         self.include_leakage = include_leakage
@@ -71,6 +72,7 @@ class VettingPipeline:
         self.shap_perturbation = shap_perturbation
         self.classes = tuple(classes)
         self.top_k = top_k
+        self.n_bins = n_bins
 
         self.pipeline = None
         self.label_encoder = None
@@ -204,8 +206,16 @@ class VettingPipeline:
             "split_strategy": split_strategy,
             "n_features": len(features),
             "features": features,
-            "uncalibrated": evaluate(y_test, raw_test, self.classes),
-            "calibrated": evaluate(y_test, test_proba, self.classes),
+            "uncalibrated": evaluate(y_test, raw_test, self.classes, n_bins=self.n_bins),
+            "calibrated": evaluate(y_test, test_proba, self.classes, n_bins=self.n_bins),
+            "reliability": {
+                "uncalibrated": reliability_table(
+                    y_test, raw_test, self.classes, n_bins=self.n_bins
+                ),
+                "calibrated": reliability_table(
+                    y_test, test_proba, self.classes, n_bins=self.n_bins
+                ),
+            },
             "conformal": self.conformal.summary(test_proba, y_test),
             "split_sizes": {
                 "train": len(train_idx),
@@ -347,6 +357,7 @@ class VettingPipeline:
                 "shap_perturbation": self.shap_perturbation,
                 "classes": self.classes,
                 "top_k": self.top_k,
+                "n_bins": self.n_bins,
                 "pipeline": self.pipeline,
                 "label_encoder": self.label_encoder,
                 "background": self.background_,
@@ -377,6 +388,7 @@ class VettingPipeline:
             shap_perturbation=state.get("shap_perturbation", "tree_path"),
             classes=state["classes"],
             top_k=state["top_k"],
+            n_bins=state.get("n_bins", 10),
         )
         instance.pipeline = state["pipeline"]
         instance.label_encoder = state.get("label_encoder")

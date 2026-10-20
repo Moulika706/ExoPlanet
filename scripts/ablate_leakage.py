@@ -7,7 +7,21 @@ set B (set A plus the six vetting-output columns). Set B is expected to
 look much better, and the gap is the size of the leak.
 
 **Split ablation** - grouped split by host star versus a plain random
-split. The gap is the size of the sibling-KOI leak.
+split. The gap is the size of the sibling-KOI leak. Three split strategies
+are measured, because "random" hides two different things:
+
+``grouped``
+    Host stars never straddle the split. This is the headline setting.
+
+``random``
+    An ordinary stratified split. Both the test and the training folds
+    differ from the grouped ones, and sibling KOIs of a test object land
+    in training. This is the "grouped vs. random split" comparison the
+    brief asks for.
+
+``sibling_leak``
+    The test rows are exactly the grouped test rows, only the training
+    pool is drawn at random. This isolates the sibling leak alone.
 
 The script also checks the ground truth directly: on the set-B rows,
 ``koi_pdisposition`` is Kepler's own disposition, so a model given that
@@ -120,7 +134,7 @@ def main() -> None:
     cases: List[Dict[str, Any]] = []
     for model_name in MODEL_NAMES:
         for include_leakage in (False, True):
-            for split_strategy in ("grouped", "sibling_leak"):
+            for split_strategy in ("grouped", "random", "sibling_leak"):
                 print(f"running {model_name} | leakage={include_leakage} | split={split_strategy}")
                 metrics = run_case(df, config, model_name, include_leakage, split_strategy)
                 metrics["include_leakage"] = include_leakage
@@ -130,13 +144,18 @@ def main() -> None:
     lines = [
         "# ExoVet - leakage ablation (Phase 2)",
         "",
-        "All numbers are on the same untouched test fold: the fold of the",
-        "grouped split whose host stars never appear in training.",
+        "The `grouped` and `sibling_leak` rows are scored on the same",
+        "untouched test fold: the fold of the grouped split whose host stars",
+        "never appear in training. The `random` rows use an ordinary",
+        "stratified split, so their test rows differ as well.",
         "",
         "- **grouped** - training data respects the host-star grouping.",
-        "- **sibling_leak** - same test rows, but the training pool is drawn",
-        "  at random, so a host star in the test fold usually has a sibling",
-        "  KOI in training. The difference between the two rows of the table",
+        "- **random** - ordinary stratified split; sibling KOIs of a test",
+        "  object land in training, and the test rows differ from the",
+        "  grouped ones. This is the grouped-vs-random comparison.",
+        "- **sibling_leak** - same test rows as `grouped`, but the training",
+        "  pool is drawn at random, so a host star in the test fold usually",
+        "  has a sibling KOI in training. The difference between the two",
         "  is therefore attributable to the sibling leak alone.",
         "",
         "| model | features | split | macro-F1 | PR-AUC | log-loss | ECE | recall@99% |",
@@ -173,6 +192,7 @@ def main() -> None:
     for model_name in MODEL_NAMES:
         clean = find(model_name, False, "grouped")
         leaky = find(model_name, True, "grouped")
+        random_split = find(model_name, False, "random")
         leaky_split = find(model_name, False, "sibling_leak")
         deltas.append(
             {
@@ -181,6 +201,10 @@ def main() -> None:
                 "macro_f1_leaky_grouped": leaky["calibrated"]["macro_f1"],
                 "feature_leak_delta": (
                     leaky["calibrated"]["macro_f1"] - clean["calibrated"]["macro_f1"]
+                ),
+                "macro_f1_random_split": random_split["calibrated"]["macro_f1"],
+                "random_split_delta": (
+                    random_split["calibrated"]["macro_f1"] - clean["calibrated"]["macro_f1"]
                 ),
                 "macro_f1_sibling_leak": leaky_split["calibrated"]["macro_f1"],
                 "split_leak_delta": (
@@ -194,18 +218,22 @@ def main() -> None:
         "## Headline deltas (macro-F1)",
         "",
         "| model | clean + grouped | leaky features | feature-leak delta | "
+        "clean + random split | random-split delta | "
         "clean + sibling leak | sibling-leak delta |",
-        "|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for delta in deltas:
         lines.append(
-            "| {model} | {a:.4f} | {b:.4f} | {c:+.4f} | {d:.4f} | {e:+.4f} |".format(
+            "| {model} | {a:.4f} | {b:.4f} | {c:+.4f} | {d:.4f} | {e:+.4f} | "
+            "{f:.4f} | {g:+.4f} |".format(
                 model=delta["model"],
                 a=delta["macro_f1_clean_grouped"],
                 b=delta["macro_f1_leaky_grouped"],
                 c=delta["feature_leak_delta"],
-                d=delta["macro_f1_sibling_leak"],
-                e=delta["split_leak_delta"],
+                d=delta["macro_f1_random_split"],
+                e=delta["random_split_delta"],
+                f=delta["macro_f1_sibling_leak"],
+                g=delta["split_leak_delta"],
             )
         )
 
@@ -259,6 +287,9 @@ def main() -> None:
         "  to a new mission. Set B includes vetting outputs and does not.",
         "- The feature leak is large and one-directional: adding the",
         "  vetting-output columns lifts macro-F1 by 0.16 to 0.31.",
+        "- The random split is the comparison the brief asks for, and it is",
+        "  the one other papers report. It is not a free choice: it puts",
+        "  sibling KOIs of a test object into training.",
         "- The sibling leak is small on this table, but the grouped split is",
         "  kept as the project default because it costs nothing and removes",
         "  the possibility of a sibling KOI of a test object appearing in",
