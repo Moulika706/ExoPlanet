@@ -8,7 +8,10 @@
 #
 PYTHON ?= python
 
-.PHONY: data toi train ablate stability phase2 cross web web-install serve figures test api lint ruff fmt clean
+.PHONY: all data toi train ablate stability phase2 cross web web-install serve figures test api lint ruff fmt clean
+
+all: data toi phase2 cross figures	## Everything, from the raw data to the figures
+	@echo "done: results/ and paper/figures/ are up to date"
 
 data:		## Pull the raw KOI table, save CSV + SHA256 + retrieval date
 	$(PYTHON) scripts/fetch_data.py

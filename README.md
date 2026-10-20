@@ -12,6 +12,17 @@ pip install -r requirements.txt
 pip install -e .   # optional; scripts add the repo root to sys.path themselves
 ```
 
+## Reproducing everything
+
+```bash
+make all
+```
+
+One command: fetch the raw tables, train, calibrate, fit the conformal
+predictor, ablate, measure the stability of the explanation, run the
+cross-mission evaluation and build the figures. Every step is seeded
+(42) and every dependency is pinned.
+
 ## Commands
 
 ```bash
