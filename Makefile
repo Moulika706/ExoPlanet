@@ -8,7 +8,7 @@
 #
 PYTHON ?= python
 
-.PHONY: data toi train ablate stability phase2 cross test api lint ruff fmt clean
+.PHONY: data toi train ablate stability phase2 cross web web-install serve test api lint ruff fmt clean
 
 data:		## Pull the raw KOI table, save CSV + SHA256 + retrieval date
 	$(PYTHON) scripts/fetch_data.py
@@ -33,12 +33,21 @@ phase2:		## Everything in Phase 2: train, ablate, stability
 cross:		## Kepler -> TESS zero-shot evaluation (Phase 5)
 	$(PYTHON) scripts/cross_mission.py
 
-
 test:		## Run the test suite
 	$(PYTHON) -m pytest tests/ -q
 
 api:		## Start the FastAPI service (Phase 6)
 	uvicorn api.main:app --reload --port 8000
+
+serve:		## Build the front end and serve it from the API (Phase 6)
+	cd web && npm install --no-audit --no-fund && npm run build
+	uvicorn api.main:app --port 8000
+
+web-install:	## Install the front end dependencies
+	cd web && npm install --no-audit --no-fund
+
+web:		## Build the front end (Phase 6)
+	cd web && npm run build
 
 ruff:		## Lint with ruff
 	ruff check .

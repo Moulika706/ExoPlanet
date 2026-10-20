@@ -19,6 +19,7 @@ xgboost==3.2.0
 
 # Test / lint
 pytest==9.1.1
+httpx==0.28.1
 
 # API request parsing (optional, FastAPI multipart support)
 python-multipart==0.0.32

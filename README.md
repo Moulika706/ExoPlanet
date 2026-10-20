@@ -22,11 +22,13 @@ make stability  # Phase 2: SHAP top-feature stability across folds
 make phase2     # Phase 2: everything above, in one command
 make toi        # Phase 5: fetch the TESS Objects of Interest table
 make cross      # Phase 5: Kepler -> TESS zero-shot evaluation
+make web        # Phase 6: build the front end
+make serve      # Phase 6: build the front end and serve it from the API
 make test       # run pytest suite
 make ruff       # lint
 ```
 
-`make api` (Phase 6) is stubbed until that phase is implemented.
+`make api` (Phase 6) starts the API on its own, without the front end.
 
 ## Results summary
 
@@ -146,6 +148,66 @@ The conclusion is that the two tables answer different questions, and a
 product that claims to work on TESS has to be trained on TESS. This is the
 kind of result that a copy of someone else's benchmark would have hidden.
 
+## The demo
+
+```bash
+make serve          # builds the front end and serves it on port 8000
+```
+
+Then open <http://127.0.0.1:8000/app/>. The API is documented at
+<http://127.0.0.1:8000/docs>.
+
+The page has the form, the probability bar, the SHAP chart, the review
+badge and the narrated report:
+
+- **Form.** The eleven physical features, with units and a plain-English
+  description. A blank field is imputed with the training median, so a
+  partial form still produces a verdict. Three real objects from the
+  archive are one click away.
+- **Verdict and review badge.** The class, the calibrated probability and
+  a badge that says *Confident* or *Needs manual review*. The badge is not
+  a heuristic: it is set when the conformal prediction set holds more than
+  one class, which is the model's own statement that it cannot decide.
+- **Probability bar.** The three class probabilities side by side.
+- **SHAP chart.** The top features as a diverging bar chart, so it is
+  visible which evidence pushed the assessment and which counted against
+  it. The report below it mentions only those features, and the API
+  refuses to answer if the generated text mentions any other.
+- **Correction.** A user who disagrees can send the correction back; it
+  is logged with the measurements so the model can be checked against what
+  the experts said.
+
+### API
+
+| endpoint | what it does |
+|---|---|
+| `GET /health` | is the service ready? |
+| `GET /model` | what model is loaded, and what is it good for? |
+| `GET /features` | the features the form should offer |
+| `POST /predict` | vet an object |
+| `POST /explain` | the same, with the explanation fields repeated |
+| `POST /feedback` | log a correction of a previous verdict |
+| `GET /feedback` | the correction log and its summary |
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"values": {"koi_period": 9.488, "koi_duration": 2.9575,
+                  "koi_depth": 615.8, "koi_prad": 2.26}}'
+```
+
+```json
+{
+  "predicted_class": "CONFIRMED",
+  "probability": 0.866,
+  "probabilities": {"CONFIRMED": 0.866, "CANDIDATE": 0.099, "FALSE POSITIVE": 0.035},
+  "prediction_set": ["CONFIRMED"],
+  "needs_review": false,
+  "report": "The model assesses this object as CONFIRMED with a calibrated probability of 87%...",
+  "top_features": [{"feature": "koi_kepmag", "shap_value": 0.416, "...": "..."}]
+}
+```
+
 Full reports: `results/train_report.md`, `results/ablation_report.md`,
 `results/shap_stability_report.md`, `results/cross_mission_report.md`.
 
@@ -165,6 +227,11 @@ src/exovet/
   crossmission.py  Kepler/TESS feature and label harmonisation
   report.py       plain-English report from the top-k SHAP features
   pipeline.py     model + calibrator + conformal + explanation, end to end
+api/
+  main.py         FastAPI: /health /model /features /predict /explain /feedback
+  schemas.py      request and response models
+  store.py        the loaded pipeline and the feedback log
+web/              React front end (Vite)
 scripts/
   fetch_data.py   archive download with checksum and retrieval record
   fetch_toi.py    TESS TOI table download (Phase 5)

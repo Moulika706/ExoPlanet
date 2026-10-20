@@ -297,6 +297,32 @@ on TESS has to be trained on TESS. This is the kind of result that a
 copied benchmark would have hidden, and it is the reason the project
 measures the cross-mission claim instead of asserting it.
 
+## 11. The service
+
+The API serves the same `VettingPipeline` object that the training script
+fits, loaded once at start-up from `results/model_xgboost.joblib`. A
+request is a row of feature values, possibly with gaps; the gaps are
+imputed with the training median inside the pipeline, exactly as in
+training, so the model never sees a value the imputer did not see.
+
+The response carries the class, the calibrated probability, all three
+class probabilities, the conformal prediction set, the `needs_review`
+flag, the top SHAP features and the plain-English report.
+
+The `needs_review` flag is not a heuristic. It is set when the conformal
+prediction set holds more than one class, which is the model's own
+statement that the evidence does not single out one class. The front end
+shows this as a badge, and the report says that the model abstains.
+
+Every response also carries the warnings that the model is trained on
+Kepler and that the cross-mission evaluation does not support TESS. A
+service that hides its own limits is not an explainable service.
+
+Corrections are logged to a JSONL file, one record per line, with the
+measurements, the predicted class, the corrected class and a timestamp.
+The format needs no database, and the log can be appended without
+rewriting it.
+
 ## References
 
 - Armstrong, Gamper & Damoulas (2021), MNRAS 504(4), 5327.
