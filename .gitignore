@@ -5,8 +5,15 @@ __pycache__/
 .venv/
 venv/
 .env
+# The raw tables are large and are public anyway: fetch them with
+# "make data" and "make toi", and the checksum and retrieval date are
+# recorded next to them in data/raw/.
 data/
-results/
+# The results are committed on purpose. The bundles in results/ are the
+# numbers the paper quotes, and tests/test_paper_claims.py checks the
+# draft against them, so they have to travel with the code.
+# The figures are build artefacts: "make figures" regenerates them from
+# the bundles in results/.
 paper/figures/
 .ipynb_checkpoints
 .DS_Store

@@ -1,0 +1,301 @@
+{
+  "model": "xgboost",
+  "seed": 42,
+  "n_splits": 5,
+  "top_k": 5,
+  "per_fold_scores": [
+    {
+      "fold": 0,
+      "n_train": 7650,
+      "n_test": 1914,
+      "macro_f1": 0.7280520891495565,
+      "log_loss": 0.548290551569754,
+      "per_class_recall": {
+        "CONFIRMED": 0.8618181818181818,
+        "CANDIDATE": 0.4696969696969697,
+        "FALSE POSITIVE": 0.8512396694214877
+      }
+    },
+    {
+      "fold": 1,
+      "n_train": 7653,
+      "n_test": 1911,
+      "macro_f1": 0.7075658048143421,
+      "log_loss": 0.5737580725111693,
+      "per_class_recall": {
+        "CONFIRMED": 0.8214936247723132,
+        "CANDIDATE": 0.4506329113924051,
+        "FALSE POSITIVE": 0.8448810754912099
+      }
+    },
+    {
+      "fold": 2,
+      "n_train": 7650,
+      "n_test": 1914,
+      "macro_f1": 0.7095086481665595,
+      "log_loss": 0.5644700081953729,
+      "per_class_recall": {
+        "CONFIRMED": 0.8418181818181818,
+        "CANDIDATE": 0.4444444444444444,
+        "FALSE POSITIVE": 0.8419421487603306
+      }
+    },
+    {
+      "fold": 3,
+      "n_train": 7650,
+      "n_test": 1914,
+      "macro_f1": 0.7192962484708159,
+      "log_loss": 0.5473862607021867,
+      "per_class_recall": {
+        "CONFIRMED": 0.8163636363636364,
+        "CANDIDATE": 0.46582278481012657,
+        "FALSE POSITIVE": 0.8710010319917441
+      }
+    },
+    {
+      "fold": 4,
+      "n_train": 7653,
+      "n_test": 1911,
+      "macro_f1": 0.7115449363145854,
+      "log_loss": 0.5675377524509734,
+      "per_class_recall": {
+        "CONFIRMED": 0.8561020036429873,
+        "CANDIDATE": 0.4481012658227848,
+        "FALSE POSITIVE": 0.8345398138572906
+      }
+    }
+  ],
+  "stability": {
+    "n_folds": 5,
+    "top_k": 5,
+    "top_k_overlap_mean": 1.0,
+    "top_k_overlap_min": 1.0,
+    "top_k_overlap_pairs": [
+      {
+        "folds": [
+          0,
+          1
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          0,
+          2
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          0,
+          3
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          0,
+          4
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          1,
+          2
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          1,
+          3
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          1,
+          4
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          2,
+          3
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          2,
+          4
+        ],
+        "jaccard": 1.0
+      },
+      {
+        "folds": [
+          3,
+          4
+        ],
+        "jaccard": 1.0
+      }
+    ],
+    "mean_kendall_tau": 0.949090909090909,
+    "min_kendall_tau": 0.8909090909090909,
+    "top_k_frequency": {
+      "koi_period": 5,
+      "koi_depth": 5,
+      "koi_prad": 5,
+      "koi_duration": 5,
+      "koi_kepmag": 5,
+      "koi_impact": 0,
+      "koi_steff": 0,
+      "koi_srad": 0,
+      "koi_insol": 0,
+      "koi_slogg": 0,
+      "koi_teq": 0
+    },
+    "rank_spread": {
+      "koi_period": 0.4,
+      "koi_depth": 0.4,
+      "koi_prad": 0.0,
+      "koi_duration": 0.0,
+      "koi_kepmag": 0.0,
+      "koi_impact": 0.39999999999999997,
+      "koi_steff": 0.39999999999999997,
+      "koi_srad": 0.0,
+      "koi_insol": 0.48989794855663565,
+      "koi_slogg": 0.48989794855663565,
+      "koi_teq": 0.0
+    },
+    "per_fold_top_k": {
+      "0": [
+        "koi_period",
+        "koi_depth",
+        "koi_prad",
+        "koi_duration",
+        "koi_kepmag"
+      ],
+      "1": [
+        "koi_period",
+        "koi_depth",
+        "koi_prad",
+        "koi_duration",
+        "koi_kepmag"
+      ],
+      "2": [
+        "koi_period",
+        "koi_depth",
+        "koi_prad",
+        "koi_duration",
+        "koi_kepmag"
+      ],
+      "3": [
+        "koi_period",
+        "koi_depth",
+        "koi_prad",
+        "koi_duration",
+        "koi_kepmag"
+      ],
+      "4": [
+        "koi_depth",
+        "koi_period",
+        "koi_prad",
+        "koi_duration",
+        "koi_kepmag"
+      ]
+    }
+  },
+  "consensus_ranking": [
+    {
+      "consensus_rank": 1,
+      "feature": "koi_period",
+      "mean_abs_shap": 0.4761198911804259,
+      "mean_rank": 1.2,
+      "rank_spread": 0.4,
+      "top_k_count": 5
+    },
+    {
+      "consensus_rank": 2,
+      "feature": "koi_depth",
+      "mean_abs_shap": 0.45954583905957563,
+      "mean_rank": 1.8,
+      "rank_spread": 0.4,
+      "top_k_count": 5
+    },
+    {
+      "consensus_rank": 3,
+      "feature": "koi_prad",
+      "mean_abs_shap": 0.4125383619288862,
+      "mean_rank": 3.0,
+      "rank_spread": 0.0,
+      "top_k_count": 5
+    },
+    {
+      "consensus_rank": 4,
+      "feature": "koi_duration",
+      "mean_abs_shap": 0.26390370954718606,
+      "mean_rank": 4.0,
+      "rank_spread": 0.0,
+      "top_k_count": 5
+    },
+    {
+      "consensus_rank": 5,
+      "feature": "koi_kepmag",
+      "mean_abs_shap": 0.24658448891291918,
+      "mean_rank": 5.0,
+      "rank_spread": 0.0,
+      "top_k_count": 5
+    },
+    {
+      "consensus_rank": 6,
+      "feature": "koi_impact",
+      "mean_abs_shap": 0.2057502507470496,
+      "mean_rank": 6.2,
+      "rank_spread": 0.39999999999999997,
+      "top_k_count": 0
+    },
+    {
+      "consensus_rank": 7,
+      "feature": "koi_steff",
+      "mean_abs_shap": 0.19449767456155292,
+      "mean_rank": 6.8,
+      "rank_spread": 0.39999999999999997,
+      "top_k_count": 0
+    },
+    {
+      "consensus_rank": 8,
+      "feature": "koi_srad",
+      "mean_abs_shap": 0.1606221477456391,
+      "mean_rank": 8.0,
+      "rank_spread": 0.0,
+      "top_k_count": 0
+    },
+    {
+      "consensus_rank": 9,
+      "feature": "koi_insol",
+      "mean_abs_shap": 0.11643268764659556,
+      "mean_rank": 9.4,
+      "rank_spread": 0.48989794855663565,
+      "top_k_count": 0
+    },
+    {
+      "consensus_rank": 10,
+      "feature": "koi_slogg",
+      "mean_abs_shap": 0.11212826922842198,
+      "mean_rank": 9.6,
+      "rank_spread": 0.48989794855663565,
+      "top_k_count": 0
+    },
+    {
+      "consensus_rank": 11,
+      "feature": "koi_teq",
+      "mean_abs_shap": 0.07708286236302019,
+      "mean_rank": 11.0,
+      "rank_spread": 0.0,
+      "top_k_count": 0
+    }
+  ]
+}
