@@ -9,8 +9,10 @@ paper cannot drift away from the code without a test failing.
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import pytest
 
@@ -60,6 +62,40 @@ def _f2(value: float) -> str:
     return f"{value:.2f}"
 
 
+#: A number in the draft, with the text it was written as.
+NUMBER = re.compile(r"-?\d[\d,]*\.?\d*")
+
+
+def _draft_numbers(draft: str) -> List[Tuple[str, float]]:
+    """Every number written in the draft, with the text it was written as.
+
+    The draft rounds a value to whatever precision the table needs, so
+    the comparison has to be numeric: a number in the draft matches a
+    value if rounding the value to the number of decimals the draft
+    used gives that number.
+    """
+    found: List[Tuple[str, float]] = []
+    for match in NUMBER.finditer(draft):
+        text = match.group(0).replace(",", "").rstrip(".")
+        if not text or text in {"-", "."}:
+            continue
+        try:
+            value = float(text)
+        except ValueError:
+            continue
+        found.append((text, value))
+    return found
+
+
+def _quoted(draft: str, numbers: List[Tuple[str, float]], value: float) -> bool:
+    """Whether *value* appears in the draft, at the precision it is written."""
+    for text, written in numbers:
+        decimals = len(text.split(".")[1]) if "." in text else 0
+        if round(value, decimals) == written:
+            return True
+    return False
+
+
 def test_the_draft_exists_and_is_not_a_stub(draft: str) -> None:
     assert len(draft) > 5000
     assert "## Abstract" in draft
@@ -78,9 +114,61 @@ def test_the_model_table_matches_the_results(draft: str, metrics: Dict[str, Any]
 
 
 def test_the_per_class_recalls_are_quoted(draft: str, metrics: Dict[str, Any]) -> None:
-    best = next(row for row in metrics["results"] if row["model"] == metrics["best_model"])
-    for recall in best["calibrated"]["per_class_recall"].values():
-        assert _f3(recall) in draft
+    for row in metrics["results"]:
+        for recall in row["calibrated"]["per_class_recall"].values():
+            assert _f3(recall) in draft
+
+
+def test_the_uncalibrated_macro_f1_is_quoted(draft: str, metrics: Dict[str, Any]) -> None:
+    for row in metrics["results"]:
+        assert _f4(row["uncalibrated"]["macro_f1"]) in draft
+        assert _f4(row["calibrated"]["macro_f1"]) in draft
+
+
+def test_the_feature_shift_is_quoted(draft: str, cross: Dict[str, Any]) -> None:
+    numbers = _draft_numbers(draft)
+    for row in cross["feature_shift"]:
+        for key in ("kepler_median", "tess_median", "median_shift", "shift_in_kepler_iqr"):
+            assert _quoted(draft, numbers, row[key]), f"{key} {row[key]} is not in the draft"
+
+
+def test_the_multi_koi_statistics_are_quoted(draft: str, ablation: Dict[str, Any]) -> None:
+    """The draft claims a specific fraction of multi-planet host stars."""
+    stats = ablation["multi_koi_statistics"]
+    assert f"{stats['fraction_of_hosts']:.1%}" in draft
+    assert f"{stats['hosts_with_multiple_kois']:,}" in draft
+
+
+def test_the_draft_points_at_the_committed_bundles(draft: str) -> None:
+    for bundle in (
+        "results/metrics.json",
+        "results/ablation_metrics.json",
+        "results/shap_stability.json",
+        "results/cross_mission_metrics.json",
+        "results/reliability.csv",
+        "paper/FIGURE_CAPTIONS.md",
+    ):
+        assert bundle in draft
+    assert "make all" in draft
+
+
+def test_the_committed_bundles_are_actually_in_the_repository() -> None:
+    """The draft is only checkable if the bundles travel with the code."""
+    tracked = subprocess.run(
+        ["git", "ls-files", "results/"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    names = {Path(path).name for path in tracked}
+    for bundle in (
+        "metrics.json",
+        "ablation_metrics.json",
+        "shap_stability.json",
+        "cross_mission_metrics.json",
+        "reliability.csv",
+    ):
+        assert bundle in names, f"{bundle} is not tracked by git"
 
 
 def test_the_conformal_mode_table_matches(draft: str, metrics: Dict[str, Any]) -> None:
@@ -180,3 +268,40 @@ def test_the_draft_never_claims_the_tool_transfers(draft: str) -> None:
     """The negative result has to be stated as a negative result."""
     assert "does not transfer" in draft
     assert "exchangeability" in draft
+
+
+def test_the_singleton_rate_claim_is_right(draft: str, metrics: Dict[str, Any]) -> None:
+    """The prose cost of the Mondrian mode has to match the numbers."""
+    modes = {mode["mode"]: mode for mode in metrics["conformal_modes"]}
+    difference = modes["marginal"]["singleton_rate"] - modes["mondrian"]["singleton_rate"]
+    points = round(difference * 100)
+    assert "points of singleton" in draft
+    # The word before "points" has to be the rounded difference.
+    import re
+
+    for match in re.finditer(r"(\w+) points of singleton", draft):
+        word = match.group(1).lower()
+        spelled = {
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+        }
+        assert word in spelled, f"unexpected wording {word!r}"
+        assert spelled[word] == points, f"the draft says {word} points, the numbers say {points}"
+
+
+def test_the_candidate_recall_claim_is_right(draft: str, cross: Dict[str, Any]) -> None:
+    """The zero-shot CANDIDATE recall, which the draft quotes as 0.06."""
+    recall = cross["zero_shot"]["metrics"]["per_class_recall"]["CANDIDATE"]
+    numbers = _draft_numbers(draft)
+    assert _quoted(draft, numbers, recall)
+    assert "recall 0.06" in draft

@@ -69,7 +69,7 @@ Our contributions are:
    predictor gives a prediction set with a coverage guarantee, and the
    model abstains when the set holds more than one class. We show that
    the guarantee is not free: the marginal mode under-covers the rare
-   class, and the class-conditional mode costs 8 points of singleton
+   class, and the class-conditional mode costs ten points of singleton
    rate.
 3. **A measurement of the stability of the explanation.** We refit the
    model on every grouped fold and compute the global SHAP importance on
@@ -273,11 +273,29 @@ after isotonic calibration on the held-out calibration fold.
 | random forest | 0.6981 | 0.7666 | 0.5796 | 0.3360 | 0.0189 | 0.1485 | 0.9013 | 1.44 |
 | **XGBoost** | **0.7290** | **0.7794** | **0.5598** | **0.3178** | 0.0239 | 0.1320 | 0.9075 | 1.41 |
 
-Per-class recall of the XGBoost model: CONFIRMED 0.862, CANDIDATE 0.482,
-FALSE POSITIVE 0.844. CANDIDATE is the hard class, as expected: a
-candidate is a signal that has not been followed up, so it shares its
-physical signature with the confirmed planets in every respect except the
-absence of confirmation.
+Per-class recall under the arg-max decision:
+
+| model | CONFIRMED | CANDIDATE | FALSE POSITIVE |
+|---|---|---|---|
+| logistic regression | 0.796 | 0.091 | 0.810 |
+| random forest | 0.844 | 0.417 | 0.839 |
+| XGBoost | 0.862 | 0.482 | 0.844 |
+
+CANDIDATE is the hard class, as expected: a candidate is a signal that has
+not been followed up, so it shares its physical signature with the
+confirmed planets in every respect except the absence of confirmation. The
+transparent baseline nearly fails on it (0.091), which is a useful
+reminder that a linear model cannot express what makes a signal
+unconfirmed.
+
+Calibration is not doing the heavy lifting on the ranking. Isotonic
+calibration moves the macro-F1 from 0.7224 to 0.7290 for XGBoost, from
+0.7104 to 0.6981 for the random forest, and from 0.5466 to 0.5272 for
+the logistic regression. It is a per-class monotone map, so it can reorder
+the classes relative to the uncalibrated model, and on two of the three
+models it makes the arg-max decision slightly worse. What it reliably
+does is make the probabilities mean what they say, which is what the
+conformal predictor and the user interface depend on.
 
 The class prior is not the only difficulty. The XGBoost model's recall at
 99% precision is 0.132, *below* the random forest's 0.149, despite a
@@ -297,7 +315,7 @@ the same test fold.
 The marginal mode buys a smaller average set, but it under-covers the
 rare CANDIDATE class at 0.765, well under the 0.90 target, because a
 single global threshold is dominated by the two common classes. The
-Mondrian mode gives up eight points of singleton rate and covers every
+Mondrian mode gives up ten points of singleton rate and covers every
 class above the target, which is the guarantee the product should claim.
 
 The expected calibration error of the headline model is 0.0379 before
@@ -339,10 +357,10 @@ three protocols on the same test rows where possible:
 The random split, which is what most of the literature reports, is
 *slightly worse* than the grouped split. The sibling leak - the
 appearance of a test host star's other KOI in the training fold - is
-worth at most 0.01, because only 11.4% of host stars carry more than one
-KOI. Both are measured rather than assumed, and the grouped split stays
-the default because it costs nothing and removes the possibility
-altogether. Figure 3 shows all three effects.
+worth at most 0.01, because only 938 of the 8,214 host stars (11.4%)
+carry more than one KOI. Both are measured rather than assumed, and the
+grouped split stays the default because it costs nothing and removes the
+possibility altogether. Figure 3 shows all three effects.
 
 ### 5.4 Stability of the explanation
 
@@ -395,6 +413,31 @@ it, and the reason is visible in the per-class recall: a per-class
 isotonic map fitted on a population that is 65% CANDIDATE pushes the
 arg-max onto that class and buries the other two. On a shifted
 population, the flexible calibrator is the wrong tool.
+
+**The population is a different population.** The two tables do not
+sample the same kind of object, and the medians say so. Expressed in
+units of the Kepler interquartile range, so that the columns are
+comparable:
+
+| feature | Kepler median | TESS median | shift | shift in Kepler IQR |
+|---|---|---|---|---|
+| `koi_period` | 9.753 | 4.147 | -5.606 | -0.148 |
+| `koi_duration` | 3.793 | 2.752 | -1.041 | -0.271 |
+| `koi_depth` | 421.1 | 4743.0 | +4321.9 | **+3.290** |
+| `koi_prad` | 2.390 | 10.487 | +8.097 | +0.598 |
+| `koi_teq` | 878.0 | 1194.5 | +316.5 | +0.377 |
+| `koi_insol` | 141.6 | 378.5 | +236.9 | +0.279 |
+| `koi_steff` | 5767 | 5799 | +32.3 | +0.040 |
+| `koi_slogg` | 4.438 | 4.330 | -0.108 | -0.332 |
+| `koi_srad` | 1.000 | 1.236 | +0.236 | +0.457 |
+
+The transit depth moves by more than three interquartile ranges: the TESS
+catalogue is dominated by much deeper events, because TESS's precision
+and its brighter, larger host stars push the detection threshold down.
+Since the depth is the second most important feature in the model
+(Figure 4), this is not a marginal shift. The planet radius moves by
+0.6 IQR for the same reason. The stellar properties barely move, which
+tells us the shift is in the selection, not in the stars.
 
 **The ranking collapsed on two of the three classes.**
 
@@ -459,6 +502,37 @@ explains itself from the same handful of features every time is more
 useful than a more accurate one that does none of these things. And a
 tool that claims to work on data it was not trained on should be shown to
 work on it, which in our case it does not.
+
+---
+
+## 8. Reproducibility and availability
+
+The code, the result bundles and this draft are in one repository, and
+every number in this paper is produced by the pipeline rather than
+transcribed by hand. The bundle behind each claim is:
+
+| claim | bundle |
+|---|---|
+| Section 5.1, 5.2 | `results/metrics.json`, `results/train_report.md`, `results/reliability.csv` |
+| Section 5.3 | `results/ablation_metrics.json`, `results/ablation_report.md` |
+| Section 5.4 | `results/shap_stability.json`, `results/shap_stability_report.md`, `results/shap_fold_importance.csv` |
+| Section 5.5 | `results/cross_mission_metrics.json`, `results/cross_mission_report.md`, `results/cross_mission_feature_shift.csv` |
+| figures | `paper/FIGURE_CAPTIONS.md`, regenerated by `make figures` |
+
+`tests/test_paper_claims.py` reads those bundles and asserts that this
+draft quotes them, so the paper cannot drift away from the code without
+a test failing. The raw tables are not in the repository; they are
+fetched from the archive with `make data` and `make toi`, and each fetch
+records its SHA-256 checksum and its retrieval date in `data/raw/`.
+
+The whole of the paper, from the raw data to the figures, is reproduced
+by
+
+    make all
+
+with one seed (42) and pinned dependencies. The fitted model is committed
+as `results/model_xgboost.joblib`, so the demonstration service serves
+exactly the model this paper describes.
 
 ---
 
