@@ -15,5 +15,8 @@ data/
 # The figures are build artefacts: "make figures" regenerates them from
 # the bundles in results/.
 paper/figures/
+# An export bundle of paper/, handy for uploading somewhere. It is a copy
+# of files that are already tracked, so it is not committed.
+paper.zip
 .ipynb_checkpoints
 .DS_Store
